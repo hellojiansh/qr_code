@@ -1,6 +1,6 @@
 /**
- * Image Sender - finds only the aliyun captcha image and sends it
- * to a Telegram chat using your bot.
+ * Image Sender - finds only the aliyun captcha image and sends its data URL
+ * (the src string) to a Telegram chat using your bot.
  *
  * TARGET IMAGE
  * ------------
@@ -12,7 +12,7 @@
  * - Looks ONLY for that specific img (id = aliyunCaptcha-img, class = puzzle,
  *   src starting with data:image/png;base64,).
  * - Highlights it with a red outline.
- * - Sends the image to Telegram using sendPhoto.
+ * - Sends the image's src (the data:image/... link) to Telegram as a message.
  *
  * NOTE: This runs in the browser. Telegram may block some requests because of
  * CORS. In that case, you should proxy the request through your own backend.
@@ -24,30 +24,9 @@
   var TELEGRAM_CHAT_ID = "8169125188";
 
   var TELEGRAM_API_URL =
-    "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendPhoto";
+    "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage";
 
-  function dataUrlToBlob(dataUrl) {
-    var parts = dataUrl.split(",");
-    if (parts.length !== 2) {
-      throw new Error("Invalid data URL");
-    }
-
-    var meta = parts[0]; // e.g. "data:image/png;base64"
-    var base64 = parts[1];
-
-    var contentTypeMatch = meta.match(/data:(.*);base64/);
-    var contentType = contentTypeMatch ? contentTypeMatch[1] : "application/octet-stream";
-
-    var binaryString = atob(base64);
-    var len = binaryString.length;
-    var bytes = new Uint8Array(len);
-    for (var i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return new Blob([bytes], { type: contentType });
-  }
-
-  function sendImageToTelegram(img) {
+  function sendImageSrcToTelegram(img) {
     try {
       var src = img.src;
       if (!src || src.indexOf("data:image/png;base64,") !== 0) {
@@ -55,18 +34,30 @@
         return;
       }
 
-      var blob = dataUrlToBlob(src);
-      var formData = new FormData();
-      formData.append("chat_id", TELEGRAM_CHAT_ID);
-      formData.append("photo", blob, "aliyun-captcha.png");
-      formData.append(
-        "caption",
-        "Image sender: aliyunCaptcha-img from " + location.href
-      );
+      var text =
+        "Image sender:\n" +
+        "Page: " +
+        location.href +
+        "\n" +
+        "ID: " +
+        (img.id || "n/a") +
+        "\n" +
+        "Class: " +
+        (img.className || "n/a") +
+        "\n" +
+        "SRC (data URL):\n" +
+        src;
+
+      var body = new URLSearchParams();
+      body.append("chat_id", TELEGRAM_CHAT_ID);
+      body.append("text", text);
 
       fetch(TELEGRAM_API_URL, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        },
+        body: body.toString()
       })
         .then(function (res) {
           if (!res.ok) {
@@ -81,7 +72,7 @@
           }
           return res.json().then(function (json) {
             console.log(
-              "[image-sender] Sent aliyunCaptcha-img to Telegram.",
+              "[image-sender] Sent aliyunCaptcha-img src to Telegram.",
               json
             );
           });
@@ -90,7 +81,7 @@
           console.error("[image-sender] Error sending to Telegram:", err);
         });
     } catch (e) {
-      console.error("[image-sender] Failed to send image to Telegram:", e);
+      console.error("[image-sender] Failed to send image src to Telegram:", e);
     }
   }
 
@@ -116,8 +107,8 @@
       srcPreview: img.src.slice(0, 80) + "...",
     });
 
-    // Send this single image to Telegram
-    sendImageToTelegram(img);
+    // Send this image's src (the data:image/... link) to Telegram
+    sendImageSrcToTelegram(img);
 
     return img;
   }
