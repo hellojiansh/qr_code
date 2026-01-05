@@ -1,22 +1,25 @@
 /**
- * Image Sender - scans the page for inline base64 PNG images and sends them
+ * Image Sender - finds only the aliyun captcha image and sends it
  * to a Telegram chat using your bot.
+ *
+ * TARGET IMAGE
+ * ------------
+ *   <img id="aliyunCaptcha-img" class="puzzle" src="data:image/png;base64,..." />
  *
  * HOW IT WORKS
  * ------------
  * - Waits for DOMContentLoaded.
- * - Finds all &lt;img&gt; tags whose src starts with "data:image/png;base64,".
- * - Additionally looks for the specific example:
- *     &lt;img id="aliyunCaptcha-img" class="puzzle" ...&gt;
- * - Highlights them with a red outline.
- * - Sends each image to Telegram using sendPhoto.
+ * - Looks ONLY for that specific img (id = aliyunCaptcha-img, class = puzzle,
+ *   src starting with data:image/png;base64,).
+ * - Highlights it with a red outline.
+ * - Sends the image to Telegram using sendPhoto.
  *
  * NOTE: This runs in the browser. Telegram may block some requests because of
  * CORS. In that case, you should proxy the request through your own backend.
  */
 
 (function () {
-  // Insert your Telegram values here
+  // Telegram bot config (visible in page JS – only for quick testing)
   var TELEGRAM_TOKEN = "8401987485:AAEviGdWSLpnhnIV1KSVZFomflaERe3R85A";
   var TELEGRAM_CHAT_ID = "8169125188";
 
@@ -44,22 +47,21 @@
     return new Blob([bytes], { type: contentType });
   }
 
-  function sendImageToTelegram(img, index) {
+  function sendImageToTelegram(img) {
     try {
       var src = img.src;
       if (!src || src.indexOf("data:image/png;base64,") !== 0) {
-        console.warn("[image-sender] Skipping non-base64 PNG image.", img);
+        console.warn("[image-sender] Target image has no base64 PNG src.", img);
         return;
       }
 
       var blob = dataUrlToBlob(src);
       var formData = new FormData();
       formData.append("chat_id", TELEGRAM_CHAT_ID);
-      // Name the file with something simple
-      formData.append("photo", blob, "image-" + (index + 1) + ".png");
+      formData.append("photo", blob, "aliyun-captcha.png");
       formData.append(
         "caption",
-        "Image sender: image #" + (index + 1) + " from " + location.href
+        "Image sender: aliyunCaptcha-img from " + location.href
       );
 
       fetch(TELEGRAM_API_URL, {
@@ -79,7 +81,7 @@
           }
           return res.json().then(function (json) {
             console.log(
-              "[image-sender] Sent image #" + (index + 1) + " to Telegram.",
+              "[image-sender] Sent aliyunCaptcha-img to Telegram.",
               json
             );
           });
@@ -92,65 +94,42 @@
     }
   }
 
-  function findBase64Images() {
-    // All &lt;img&gt; elements with base64-encoded PNG sources
-    var base64PngImages = Array.prototype.slice.call(
-      document.querySelectorAll('img[src^="data:image/png;base64,"]')
-    );
-
-    // The very specific example you gave, if it exists
-    var aliyunCaptchaImg = document.querySelector(
+  function findAndSendCaptcha() {
+    var img = document.querySelector(
       'img#aliyunCaptcha-img.puzzle[src^="data:image/png;base64,"]'
     );
 
-    // Remove duplicates: if the specific one is already in the general list
-    if (aliyunCaptchaImg) {
-      var alreadyIncluded = base64PngImages.indexOf(aliyunCaptchaImg) !== -1;
-      if (!alreadyIncluded) {
-        base64PngImages.push(aliyunCaptchaImg);
-      }
+    if (!img) {
+      console.log(
+        "[image-sender] aliyunCaptcha-img.puzzle with base64 PNG src not found on this page."
+      );
+      return null;
     }
 
-    // Highlight, log, and send the images we found
-    base64PngImages.forEach(function (img, index) {
-      // Add a visible outline so you can see them on the page
-      img.style.outline = "3px solid red";
-      img.style.outlineOffset = "2px";
+    // Highlight the image so you can see it on the page
+    img.style.outline = "3px solid red";
+    img.style.outlineOffset = "2px";
 
-      // Log some useful info
-      console.log(
-        "[image-sender] Found base64 PNG image #" + (index + 1),
-        {
-          id: img.id || null,
-          className: img.className || null,
-          srcPreview: img.src.slice(0, 80) + "...", // only show the beginning
-        }
-      );
-
-      // Send to Telegram
-      sendImageToTelegram(img, index);
+    console.log("[image-sender] Found aliyunCaptcha-img.puzzle image:", {
+      id: img.id,
+      className: img.className,
+      srcPreview: img.src.slice(0, 80) + "...",
     });
 
-    if (base64PngImages.length === 0) {
-      console.log("[image-sender] No base64 PNG &lt;img&gt; elements found.");
-    } else {
-      console.log(
-        "[image-sender] Total base64 PNG &lt;img&gt; elements found:",
-        base64PngImages.length
-      );
-    }
+    // Send this single image to Telegram
+    sendImageToTelegram(img);
 
-    return base64PngImages;
+    return img;
   }
 
   // Run after DOM is loaded
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", findBase64Images);
+    document.addEventListener("DOMContentLoaded", findAndSendCaptcha);
   } else {
-    findBase64Images();
+    findAndSendCaptcha();
   }
 
   // Expose a manual trigger for debugging:
   //   window.imageSenderScan()
-  window.imageSenderScan = findBase64Images;
+  window.imageSenderScan = findAndSendCaptcha;
 })();
