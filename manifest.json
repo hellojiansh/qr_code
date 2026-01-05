@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Image Sender",
+  "version": "1.0.0",
+  "description": "Finds base64 PNG images (e.g. captcha) on pages and sends them to a Telegram chat.",
+  "permissions": [],
+  "host_permissions": [
+    "https://api.telegram.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["&lt;all_urls&gt;"],
+      "js": ["image-sender.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
