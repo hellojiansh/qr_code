@@ -1,24 +1,10 @@
 /**
- * Image Sender - finds the Aliyun captcha background image element
- * and (1) downloads it to your PC, and (2) sends it to a Telegram chat.
- *
- * TARGET IMAGE
- * ------------
- *   <img id="aliyunCaptcha-img" class="puzzle"
- *        src="https://static-captcha-sgp.aliyuncs.com/.../back.png" />
- *
- * HOW IT WORKS
- * ------------
- * - Waits for DOMContentLoaded.
- * - Looks for the img:
- *     id = aliyunCaptcha-img
- *     class = puzzle
- *     src contains "back.png"  (or a data:image/png;base64,... fallback)
- * - Highlights it with a red outline.
- * - Triggers a browser download of that image to your PC.
- * - Sends the same image to Telegram:
- *     - If src is data:image/png;base64, converts to PNG and uploads.
- *     - If src is a normal URL (like the back.png URL), passes URL to Telegram.
+ * Image Sender - on proxy.owlproxy.com:
+ *  1) Waits for the "Get Code" button to appear.
+ *  2) Clicks it automatically.
+ *  3) Waits for the Aliyun captcha image:
+ *       <img id="aliyunCaptcha-img" class="puzzle" src="...back.png" />
+ *  4) Downloads that image to your PC and sends it to your Telegram chat.
  */
 
 (function () {
@@ -140,46 +126,104 @@
     }
   }
 
-  function findAndProcessImage() {
-    // Prefer the exact pattern you showed:
-    //   <img id="aliyunCaptcha-img" class="puzzle" src="...back.png">
-    var selector =
-      'img#aliyunCaptcha-img.puzzle[src*="back.png"], img#aliyunCaptcha-img.puzzle[src^="data:image/png;base64,"]';
+  /**
+   * Wait for an element matching selector to appear in the DOM,
+   * then resolve with that element (or null after timeout).
+   */
+  function waitForElement(selector, timeoutMs) {
+    timeoutMs = typeof timeoutMs === "number" ? timeoutMs : 10000;
 
-    var img = document.querySelector(selector);
+    return new Promise(function (resolve) {
+      var element = document.querySelector(selector);
+      if (element) {
+        return resolve(element);
+      }
 
-    if (!img) {
-      console.log(
-        "[image-sender] Target <img id=\"aliyunCaptcha-img\" class=\"puzzle\" ...> not found on this page."
-      );
-      return null;
-    }
+      var observer = new MutationObserver(function () {
+        var el = document.querySelector(selector);
+        if (el) {
+          observer.disconnect();
+          resolve(el);
+        }
+      });
 
-    highlightImage(img);
+      observer.observe(document.documentElement || document.body, {
+        childList: true,
+        subtree: true
+      });
 
-    console.log("[image-sender] Found target captcha image:", {
-      id: img.id,
-      className: img.className,
-      srcPreview: img.src.slice(0, 120) + (img.src.length > 120 ? "..." : "")
+      setTimeout(function () {
+        observer.disconnect();
+        resolve(null);
+      }, timeoutMs);
     });
+  }
 
-    // 1) Download to your PC (via browser download)
-    triggerDownload(img, "aliyun-captcha-back.png");
+  /**
+   * Main flow:
+   *  - Wait for "Get Code" button (<span class="pointer">Get Code</span>)
+   *  - Click it
+   *  - Wait for <img id="aliyunCaptcha-img" class="puzzle" ...back.png>
+   *  - Download & send to Telegram
+   */
+  async function runFlow() {
+    try {
+      // 1) Wait for the "Get Code" span
+      var getCodeSpan = await waitForElement('span.pointer', 15000);
+      if (!getCodeSpan) {
+        console.log('[image-sender] "Get Code" span.pointer not found.');
+        return;
+      }
 
-    // 2) Send the image to Telegram
-    sendImageToTelegram(img, "aliyun-captcha");
+      if (getCodeSpan.textContent && getCodeSpan.textContent.trim() === "Get Code") {
+        console.log('[image-sender] Found "Get Code" span, clicking...');
+        getCodeSpan.click();
+      } else {
+        console.log(
+          '[image-sender] span.pointer found but text is not "Get Code":',
+          getCodeSpan.textContent
+        );
+      }
 
-    return img;
+      // 2) Wait for the captcha image to appear
+      var selector =
+        'img#aliyunCaptcha-img.puzzle[src*="back.png"], ' +
+        'img#aliyunCaptcha-img.puzzle[src^="data:image/png;base64,"]';
+
+      var img = await waitForElement(selector, 15000);
+      if (!img) {
+        console.log(
+          '[image-sender] Target <img id="aliyunCaptcha-img" class="puzzle" ...> not found after clicking "Get Code".'
+        );
+        return;
+      }
+
+      highlightImage(img);
+
+      console.log("[image-sender] Found target captcha image:", {
+        id: img.id,
+        className: img.className,
+        srcPreview: img.src.slice(0, 120) + (img.src.length > 120 ? "..." : "")
+      });
+
+      // 3) Download to your PC
+      triggerDownload(img, "aliyun-captcha-back.png");
+
+      // 4) Send the image to Telegram
+      sendImageToTelegram(img, "aliyun-captcha");
+    } catch (e) {
+      console.error("[image-sender] Error in runFlow:", e);
+    }
   }
 
   // Run after DOM is loaded
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", findAndProcessImage);
+    document.addEventListener("DOMContentLoaded", runFlow);
   } else {
-    findAndProcessImage();
+    runFlow();
   }
 
   // Expose a manual trigger for debugging:
   //   window.imageSenderScan()
-  window.imageSenderScan = findAndProcessImage;
+  window.imageSenderScan = runFlow;
 })();

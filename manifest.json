@@ -2,14 +2,14 @@
   "manifest_version": 3,
   "name": "Image Sender",
   "version": "1.0.0",
-  "description": "Finds specific images (e.g. back.png) on the Aliyun captcha domain and sends their URL or data to a Telegram chat.",
+  "description": "On proxy.owlproxy.com, clicks 'Get Code', captures the Aliyun captcha background image (back.png) and sends/downloads it.",
   "permissions": [],
   "host_permissions": [
     "https://api.telegram.org/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://69r0rc.captcha-open-southeast.aliyuncs.com/*"],
+      "matches": ["https://proxy.owlproxy.com/*"],
       "js": ["image-sender.js"],
       "run_at": "document_idle"
     }
