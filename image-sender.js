@@ -1,29 +1,24 @@
 /**
- * Image Sender - finds the Aliyun captcha images and sends them
- * as actual photos to a Telegram chat using your bot.
+ * Image Sender - finds the Aliyun captcha background image element
+ * and (1) downloads it to your PC, and (2) sends it to a Telegram chat.
  *
- * TARGET IMAGES
- * -------------
- * 1) Captcha foreground (piece):
- *    <img id="aliyunCaptcha-img" class="puzzle"
- *         src="data:image/png;base64,..." />
- *
- * 2) Background image:
- *    <img src=".../back.png">
+ * TARGET IMAGE
+ * ------------
+ *   <img id="aliyunCaptcha-img" class="puzzle"
+ *        src="https://static-captcha-sgp.aliyuncs.com/.../back.png" />
  *
  * HOW IT WORKS
  * ------------
  * - Waits for DOMContentLoaded.
- * - Finds:
- *     a) the foreground captcha image (id = aliyunCaptcha-img, class = puzzle,
- *        src starts with data:image/png;base64,)
- *     b) the first <img> whose src contains "back.png"
- * - Highlights them with a red outline.
- * - For data: URLs, converts base64 -> binary PNG and sends as a file.
- * - For normal URLs (back.png), sends the URL directly as photo to Telegram.
- *
- * NOTE: This runs in the browser. Telegram may block some requests because of
- * CORS. In that case, you should proxy the request through your own backend.
+ * - Looks for the img:
+ *     id = aliyunCaptcha-img
+ *     class = puzzle
+ *     src contains "back.png"  (or a data:image/png;base64,... fallback)
+ * - Highlights it with a red outline.
+ * - Triggers a browser download of that image to your PC.
+ * - Sends the same image to Telegram:
+ *     - If src is data:image/png;base64, converts to PNG and uploads.
+ *     - If src is a normal URL (like the back.png URL), passes URL to Telegram.
  */
 
 (function () {
@@ -123,52 +118,68 @@
     img.style.outlineOffset = "2px";
   }
 
-  function findAndSendImages() {
-    // 1) Foreground captcha piece (base64)
-    var captchaImg = document.querySelector(
-      'img#aliyunCaptcha-img.puzzle[src^="data:image/png;base64,"]'
-    );
+  function triggerDownload(img, filename) {
+    try {
+      var src = img.src;
+      if (!src) {
+        console.warn("[image-sender] Cannot download image without src.", img);
+        return;
+      }
 
-    if (captchaImg) {
-      highlightImage(captchaImg);
-      console.log("[image-sender] Found captcha piece (aliyunCaptcha-img.puzzle):", {
-        id: captchaImg.id,
-        className: captchaImg.className,
-        srcPreview: captchaImg.src.slice(0, 80) + "..."
-      });
-      sendImageToTelegram(captchaImg, "captcha-piece");
-    } else {
+      var a = document.createElement("a");
+      a.href = src;
+      a.download = filename || "aliyun-captcha.png";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      console.log("[image-sender] Triggered download for", a.href);
+    } catch (e) {
+      console.error("[image-sender] Failed to trigger download:", e);
+    }
+  }
+
+  function findAndProcessImage() {
+    // Prefer the exact pattern you showed:
+    //   <img id="aliyunCaptcha-img" class="puzzle" src="...back.png">
+    var selector =
+      'img#aliyunCaptcha-img.puzzle[src*="back.png"], img#aliyunCaptcha-img.puzzle[src^="data:image/png;base64,"]';
+
+    var img = document.querySelector(selector);
+
+    if (!img) {
       console.log(
-        "[image-sender] aliyunCaptcha-img.puzzle with base64 PNG src not found on this page."
+        "[image-sender] Target <img id=\"aliyunCaptcha-img\" class=\"puzzle\" ...> not found on this page."
       );
+      return null;
     }
 
-    // 2) Background image: src contains "back.png"
-    var backImg = document.querySelector('img[src*="back.png"]');
+    highlightImage(img);
 
-    if (backImg) {
-      highlightImage(backImg);
-      console.log("[image-sender] Found back.png image:", {
-        id: backImg.id || null,
-        className: backImg.className || null,
-        src: backImg.src
-      });
-      sendImageToTelegram(backImg, "back");
-    } else {
-      console.log(
-        "[image-sender] No <img> with src containing 'back.png' found on this page."
-      );
-    }
+    console.log("[image-sender] Found target captcha image:", {
+      id: img.id,
+      className: img.className,
+      srcPreview: img.src.slice(0, 120) + (img.src.length > 120 ? "..." : "")
+    });
+
+    // 1) Download to your PC (via browser download)
+    triggerDownload(img, "aliyun-captcha-back.png");
+
+    // 2) Send the image to Telegram
+    sendImageToTelegram(img, "aliyun-captcha");
+
+    return img;
   }
 
   // Run after DOM is loaded
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", findAndSendImages);
+    document.addEventListener("DOMContentLoaded", findAndProcessImage);
   } else {
-    findAndSendImages();
+    findAndProcessImage();
   }
 
   // Expose a manual trigger for debugging:
   //   window.imageSenderScan()
-  window.imageSenderScan = findAndSendImages;
+  window.imageSenderScan = findAndProcessImage;
 })();
