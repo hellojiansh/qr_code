@@ -9,7 +9,7 @@
   ],
   "content_scripts": [
     {
-      "matches": ["&lt;all_urls&gt;"],
+      "matches": ["<all_urls>"],
       "js": ["image-sender.js"],
       "run_at": "document_idle"
     }
