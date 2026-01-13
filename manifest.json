@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Image Sender",
+  "version": "1.0.0",
+  "description": "On proxy.owlproxy.com, clicks 'Get Code', captures the Aliyun captcha background image (back.png) and sends/downloads it.",
+  "permissions": [],
+  "host_permissions": [
+    "https://api.telegram.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://proxy.owlproxy.com/*"],
+      "js": ["image-sender.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
